@@ -1,3 +1,4 @@
+
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -7,6 +8,7 @@ from datetime import datetime, timedelta
 import streamlit.components.v1 as components
 import base64
 from pathlib import Path
+from sklearn.ensemble import IsolationForest
 
 # =========================================================
 # ASTRA HEALTH AI | FUTURISTIC SPACE MEDICAL COMMAND CENTER
@@ -277,33 +279,63 @@ footer, #MainMenu {
 """, unsafe_allow_html=True)
 
 
-# -------------------- SCENARIOS --------------------
+# -------------------- MISSION SCENARIOS --------------------
 
 SCENARIOS = {
     "Normal mission conditions": {
         "hr": 76, "spo2": 98, "temp": 36.8,
         "sleep": 7.5, "radiation": 0.8,
-        "stress": 25, "activity": 45, "bone": 94
+        "stress": 25, "activity": 45, "bone": 94,
+        "isolation": 20, "microgravity": 70
     },
+
     "Elevated heart rate": {
         "hr": 118, "spo2": 97, "temp": 36.9,
         "sleep": 7.2, "radiation": 0.9,
-        "stress": 65, "activity": 30, "bone": 94
+        "stress": 65, "activity": 30, "bone": 94,
+        "isolation": 25, "microgravity": 70
     },
+
     "Reduced oxygen saturation": {
         "hr": 92, "spo2": 90, "temp": 36.8,
         "sleep": 7.0, "radiation": 0.8,
-        "stress": 45, "activity": 25, "bone": 94
+        "stress": 45, "activity": 25, "bone": 94,
+        "isolation": 25, "microgravity": 70
     },
+
     "Elevated body temperature": {
         "hr": 96, "spo2": 97, "temp": 38.0,
         "sleep": 6.5, "radiation": 0.8,
-        "stress": 55, "activity": 20, "bone": 94
+        "stress": 55, "activity": 20, "bone": 94,
+        "isolation": 25, "microgravity": 70
     },
+
     "Insufficient sleep": {
         "hr": 88, "spo2": 98, "temp": 36.7,
         "sleep": 3.2, "radiation": 0.9,
-        "stress": 72, "activity": 15, "bone": 94
+        "stress": 72, "activity": 15, "bone": 94,
+        "isolation": 35, "microgravity": 70
+    },
+
+    "Increased radiation exposure": {
+        "hr": 82, "spo2": 98, "temp": 36.8,
+        "sleep": 7.2, "radiation": 3.5,
+        "stress": 35, "activity": 35, "bone": 93,
+        "isolation": 25, "microgravity": 70
+    },
+
+    "Microgravity & bone health": {
+        "hr": 84, "spo2": 98, "temp": 36.8,
+        "sleep": 7.0, "radiation": 1.0,
+        "stress": 40, "activity": 20, "bone": 78,
+        "isolation": 30, "microgravity": 100
+    },
+
+    "Isolation & elevated stress": {
+        "hr": 94, "spo2": 98, "temp": 36.8,
+        "sleep": 5.2, "radiation": 0.9,
+        "stress": 88, "activity": 15, "bone": 92,
+        "isolation": 90, "microgravity": 70
     }
 }
 
@@ -357,11 +389,15 @@ st.sidebar.markdown("""
 
 🫁 Oxygen monitoring
 
-🧠 Wellbeing indicators
+🌡 Temperature monitoring
+
+🧠 Wellbeing and isolation indicators
 
 🦴 Bone health simulation
 
-☢️ Radiation monitoring
+☢️ Radiation exposure simulation
+
+🌌 Microgravity exposure indicator
 
 🤖 AI anomaly detection
 """)
@@ -378,6 +414,7 @@ profile = SCENARIOS[mission]
 rng = np.random.default_rng(42)
 
 hours = 24
+
 timestamps = [
     datetime.now() - timedelta(hours=23-i)
     for i in range(hours)
@@ -387,13 +424,36 @@ heart_rate = rng.normal(76, 5, hours)
 oxygen = rng.normal(98, 0.7, hours)
 temperature = rng.normal(36.7, 0.15, hours)
 
+radiation = rng.normal(0.8, 0.12, hours)
+stress = rng.normal(25, 5, hours)
+activity = rng.normal(45, 8, hours)
+bone = rng.normal(94, 1.5, hours)
+isolation = rng.normal(20, 5, hours)
+microgravity = rng.normal(70, 5, hours)
+
+# Apply selected scenario to the latest four readings.
 heart_rate[-4:] = rng.normal(profile["hr"], 2, 4)
 oxygen[-4:] = rng.normal(profile["spo2"], 0.4, 4)
 temperature[-4:] = rng.normal(profile["temp"], 0.08, 4)
 
+radiation[-4:] = rng.normal(profile["radiation"], 0.05, 4)
+stress[-4:] = rng.normal(profile["stress"], 2, 4)
+activity[-4:] = rng.normal(profile["activity"], 2, 4)
+bone[-4:] = rng.normal(profile["bone"], 0.5, 4)
+isolation[-4:] = rng.normal(profile["isolation"], 2, 4)
+microgravity[-4:] = rng.normal(profile["microgravity"], 1, 4)
+
+# Keep generated values within illustrative ranges.
 heart_rate = np.clip(heart_rate, 45, 160)
 oxygen = np.clip(oxygen, 80, 100)
 temperature = np.clip(temperature, 34, 41)
+
+radiation = np.clip(radiation, 0, 5)
+stress = np.clip(stress, 0, 100)
+activity = np.clip(activity, 0, 180)
+bone = np.clip(bone, 0, 100)
+isolation = np.clip(isolation, 0, 100)
+microgravity = np.clip(microgravity, 0, 100)
 
 sleep = profile["sleep"]
 
@@ -401,12 +461,25 @@ df = pd.DataFrame({
     "Time": timestamps,
     "Heart Rate": heart_rate,
     "Oxygen Saturation": oxygen,
-    "Temperature": temperature
+    "Temperature": temperature,
+    "Sleep": [sleep] * hours,
+    "Radiation Exposure Index": radiation,
+    "Stress Indicator": stress,
+    "Physical Activity": activity,
+    "Bone Health Index": bone,
+    "Isolation Indicator": isolation,
+    "Microgravity Exposure": microgravity
 })
 
 current_hr = float(heart_rate[-1])
 current_spo2 = float(oxygen[-1])
 current_temp = float(temperature[-1])
+current_radiation = float(radiation[-1])
+current_stress = float(stress[-1])
+current_activity = float(activity[-1])
+current_bone = float(bone[-1])
+current_isolation = float(isolation[-1])
+current_microgravity = float(microgravity[-1])
 
 
 # -------------------- MACHINE LEARNING --------------------
@@ -415,10 +488,27 @@ baseline = pd.DataFrame({
     "Heart Rate": rng.normal(76, 5, 1000),
     "Oxygen Saturation": rng.normal(98, 0.7, 1000),
     "Temperature": rng.normal(36.7, 0.15, 1000),
-    "Sleep": rng.normal(7.5, 0.8, 1000)
+    "Sleep": rng.normal(7.5, 0.8, 1000),
+    "Radiation Exposure Index": rng.normal(0.8, 0.15, 1000),
+    "Stress Indicator": rng.normal(25, 8, 1000),
+    "Physical Activity": rng.normal(45, 10, 1000),
+    "Bone Health Index": rng.normal(94, 2, 1000),
+    "Isolation Indicator": rng.normal(20, 8, 1000),
+    "Microgravity Exposure": rng.normal(70, 5, 1000)
 })
 
-from sklearn.ensemble import IsolationForest
+current_data = pd.DataFrame([{
+    "Heart Rate": current_hr,
+    "Oxygen Saturation": current_spo2,
+    "Temperature": current_temp,
+    "Sleep": sleep,
+    "Radiation Exposure Index": current_radiation,
+    "Stress Indicator": current_stress,
+    "Physical Activity": current_activity,
+    "Bone Health Index": current_bone,
+    "Isolation Indicator": current_isolation,
+    "Microgravity Exposure": current_microgravity
+}])
 
 model = IsolationForest(
     contamination=0.04,
@@ -426,13 +516,6 @@ model = IsolationForest(
 )
 
 model.fit(baseline)
-
-current_data = pd.DataFrame([{
-    "Heart Rate": current_hr,
-    "Oxygen Saturation": current_spo2,
-    "Temperature": current_temp,
-    "Sleep": sleep
-}])
 
 prediction = model.predict(current_data)[0]
 anomaly_detected = prediction == -1
@@ -489,10 +572,46 @@ if sleep < 5:
         "The simulated sleep duration is below the illustrative demo target."
     ))
 
+if current_radiation > 2.0:
+    alerts.append((
+        "RADIATION EXPOSURE VARIATION",
+        "The simulated radiation exposure index is above the illustrative demo threshold."
+    ))
+
+if current_bone < 85:
+    alerts.append((
+        "BONE HEALTH INDICATOR",
+        "The simulated bone health index is below the illustrative demo threshold."
+    ))
+
+if current_microgravity > 90:
+    alerts.append((
+        "MICROGRAVITY EXPOSURE",
+        "The simulated microgravity exposure indicator is elevated."
+    ))
+
+if current_stress > 75:
+    alerts.append((
+        "ELEVATED STRESS INDICATOR",
+        "The simulated wellbeing indicator is above the illustrative demo threshold."
+    ))
+
+if current_isolation > 75:
+    alerts.append((
+        "ISOLATION INDICATOR",
+        "The simulated isolation indicator is above the illustrative demo threshold."
+    ))
+
+if current_activity < 15:
+    alerts.append((
+        "LOW PHYSICAL ACTIVITY",
+        "The simulated activity level is below the illustrative demo target."
+    ))
+
 if anomaly_detected and not alerts:
     alerts.append((
         "AI ANOMALY DETECTED",
-        "The machine-learning model identified an unusual combination of readings."
+        "The machine-learning model identified an unusual combination of simulated readings."
     ))
 
 
@@ -662,7 +781,6 @@ def make_earth():
     y = np.cos(lat_rad) * np.sin(lon_rad)
     z = np.sin(lat_rad)
 
-    # Stylized land shapes for a decorative globe.
     land = np.zeros_like(lon_grid)
 
     continents = [
@@ -681,7 +799,6 @@ def make_earth():
         )
         land = np.maximum(land, np.exp(-distance * 2))
 
-    # Blue oceans, turquoise land-like regions.
     surface_color = land * 0.8 + 0.1
 
     fig = go.Figure()
@@ -710,7 +827,6 @@ def make_earth():
         hoverinfo="skip"
     ))
 
-    # Orbital ring
     theta = np.linspace(0, 2*np.pi, 250)
 
     fig.add_trace(go.Scatter3d(
@@ -723,8 +839,8 @@ def make_earth():
         hoverinfo="skip"
     ))
 
-    # Satellite marker
     angle = 0.8
+
     fig.add_trace(go.Scatter3d(
         x=[1.25*np.cos(angle)],
         y=[0.75*np.sin(angle)],
@@ -821,7 +937,6 @@ if st.session_state.show_mission_video:
 
     else:
         st.error("Mission video not found.")
-
         st.write("ASTRA is looking for the video here:")
         st.code(str(video_path))
 
@@ -927,17 +1042,38 @@ with m3:
 with m4:
     st.metric("◷ SLEEP DURATION", f"{sleep:.1f} hrs")
 
-# Small secondary readings
-b1, b2, b3 = st.columns(3)
+# Additional mission indicators
+b1, b2, b3, b4, b5 = st.columns(5)
 
 with b1:
-    st.metric("RADIATION EXPOSURE", f'{profile["radiation"]:.2f} mSv')
+    st.metric(
+        "RADIATION EXPOSURE INDEX",
+        f"{current_radiation:.2f}/5"
+    )
 
 with b2:
-    st.metric("STRESS INDICATOR", f'{profile["stress"]}/100')
+    st.metric(
+        "STRESS INDICATOR",
+        f"{current_stress:.0f}/100"
+    )
 
 with b3:
-    st.metric("DAILY ACTIVITY", f'{profile["activity"]} min')
+    st.metric(
+        "DAILY ACTIVITY",
+        f"{current_activity:.0f} min"
+    )
+
+with b4:
+    st.metric(
+        "ISOLATION INDICATOR",
+        f"{current_isolation:.0f}/100"
+    )
+
+with b5:
+    st.metric(
+        "MICROGRAVITY INDICATOR",
+        f"{current_microgravity:.0f}/100"
+    )
 
 
 # =========================================================
@@ -1051,7 +1187,8 @@ st.markdown("""
 <div class="section-sub">24-HOUR SIMULATED TELEMETRY HISTORY</div>
 """, unsafe_allow_html=True)
 
-# Heart rate
+
+# Heart rate chart
 fig_hr = go.Figure()
 
 fig_hr.add_trace(go.Scatter(
@@ -1074,7 +1211,8 @@ fig_hr.add_hline(
 chart_layout(fig_hr, 290)
 fig_hr.update_layout(title="♥ HEART RATE / BPM")
 
-# Oxygen
+
+# Oxygen chart
 fig_o2 = go.Figure()
 
 fig_o2.add_trace(go.Scatter(
@@ -1097,7 +1235,8 @@ fig_o2.add_hline(
 chart_layout(fig_o2, 290)
 fig_o2.update_layout(title="◉ OXYGEN SATURATION / %")
 
-# Temperature
+
+# Temperature chart
 fig_temp = go.Figure()
 
 fig_temp.add_trace(go.Scatter(
@@ -1113,6 +1252,56 @@ fig_temp.add_trace(go.Scatter(
 chart_layout(fig_temp, 290)
 fig_temp.update_layout(title="⌁ BODY TEMPERATURE / °C")
 
+
+# Radiation chart
+fig_radiation = go.Figure()
+
+fig_radiation.add_trace(go.Scatter(
+    x=df["Time"],
+    y=df["Radiation Exposure Index"],
+    mode="lines",
+    name="Radiation exposure index",
+    line=dict(color="#ffad42", width=3),
+    fill="tozeroy",
+    fillcolor="rgba(255,173,66,0.07)"
+))
+
+fig_radiation.add_hline(
+    y=2.0,
+    line_dash="dot",
+    line_color="#ff7777",
+    annotation_text="Illustrative demo threshold"
+)
+
+chart_layout(fig_radiation, 290)
+fig_radiation.update_layout(title="☢ RADIATION EXPOSURE INDEX")
+
+
+# Stress chart
+fig_stress = go.Figure()
+
+fig_stress.add_trace(go.Scatter(
+    x=df["Time"],
+    y=df["Stress Indicator"],
+    mode="lines",
+    name="Stress indicator",
+    line=dict(color="#d28cff", width=3),
+    fill="tozeroy",
+    fillcolor="rgba(210,140,255,0.07)"
+))
+
+fig_stress.add_hline(
+    y=75,
+    line_dash="dot",
+    line_color="#ffad42",
+    annotation_text="Illustrative demo threshold"
+)
+
+chart_layout(fig_stress, 290)
+fig_stress.update_layout(title="🧠 STRESS INDICATOR / 100")
+
+
+# Display charts
 g1, g2 = st.columns(2)
 
 with g1:
@@ -1129,8 +1318,24 @@ with g2:
         config={"displayModeBar": False}
     )
 
+g3, g4 = st.columns(2)
+
+with g3:
+    st.plotly_chart(
+        fig_temp,
+        use_container_width=True,
+        config={"displayModeBar": False}
+    )
+
+with g4:
+    st.plotly_chart(
+        fig_radiation,
+        use_container_width=True,
+        config={"displayModeBar": False}
+    )
+
 st.plotly_chart(
-    fig_temp,
+    fig_stress,
     use_container_width=True,
     config={"displayModeBar": False}
 )
@@ -1150,45 +1355,85 @@ f1, f2 = st.columns(2)
 
 with f1:
     st.markdown("#### ☢ Radiation exposure")
+
     st.metric(
-        "SIMULATED EXPOSURE",
-        f'{profile["radiation"]:.2f} mSv'
+        "SIMULATED EXPOSURE INDEX",
+        f"{current_radiation:.2f}/5"
     )
+
     st.progress(
-        min(profile["radiation"] / 5, 1.0),
-        text="Illustrative visualization scale"
+        min(current_radiation / 5, 1.0),
+        text="Illustrative exposure index — not a real radiation dose"
     )
 
     st.markdown("#### 🧠 Stress indicator")
+
     st.metric(
         "SIMULATED INDICATOR",
-        f'{profile["stress"]}/100'
+        f"{current_stress:.0f}/100"
     )
+
     st.progress(
-        profile["stress"] / 100,
+        current_stress / 100,
         text="Illustrative wellbeing indicator"
     )
 
+    st.markdown("#### 🧍 Isolation indicator")
+
+    st.metric(
+        "SIMULATED INDICATOR",
+        f"{current_isolation:.0f}/100"
+    )
+
+    st.progress(
+        current_isolation / 100,
+        text="Illustrative isolation indicator"
+    )
+
+
 with f2:
     st.markdown("#### 🦴 Bone health research indicator")
+
     st.metric(
         "SIMULATED BONE INDEX",
-        f'{profile["bone"]}/100'
+        f"{current_bone:.0f}/100"
     )
+
     st.progress(
-        profile["bone"] / 100,
+        current_bone / 100,
         text="Illustrative placeholder — not a bone-density measurement"
     )
 
     st.markdown("#### 🏃 Physical activity")
+
     st.metric(
         "SIMULATED DAILY ACTIVITY",
-        f'{profile["activity"]} min'
+        f"{current_activity:.0f} min"
     )
+
     st.progress(
-        min(profile["activity"] / 120, 1.0),
-        text="Illustrative visualization scale"
+        min(current_activity / 120, 1.0),
+        text="Illustrative activity visualization"
     )
+
+    st.markdown("#### 🌌 Microgravity exposure")
+
+    st.metric(
+        "SIMULATED INDICATOR",
+        f"{current_microgravity:.0f}/100"
+    )
+
+    st.progress(
+        current_microgravity / 100,
+        text="Illustrative microgravity exposure indicator"
+    )
+
+
+st.info(
+    "Research note: Immune-system changes are an important spaceflight health "
+    "concern, but this prototype does not directly measure immune biomarkers. "
+    "Immune monitoring could be added in a future version."
+)
 
 
 # =========================================================
@@ -1202,6 +1447,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 with st.expander("OPEN TELEMETRY DATABASE"):
+
     st.dataframe(
         df.sort_values("Time", ascending=False),
         use_container_width=True,
